@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IT Salary Dashboard</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Plotly.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.24.2/plotly.min.js"></script>
+    <!-- D3.js для облака слов -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <!-- D3 Cloud -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-cloud/1.2.5/d3.layout.cloud.min.js"></script>
+    
+    <style>
+        :root {
+            --primary-color: #2196f3;
+            --secondary-color: #4caf50;
+            --dark-color: #1a237e;
+            --light-color: #e3f2fd;
+            --gray-color: #f5f5f5;
+            --text-color: #333333;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            color: var(--text-color);
+            background-color: #fafafa;
+        }
+        
+        .dashboard-header {
+            background-color: white;
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+            padding: 1rem 0;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        
+        .stats-card {
+            border-radius: 8px;
+            border: 1px solid rgba(0,0,0,0.1);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+            background-color: white;
+        }
+        
+        .stats-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .stats-card .card-body {
+            padding: 1.5rem;
+        }
+        
+        .stats-value {
+            font-size: 2rem;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+        
+        .stats-label {
+            color: #666;
+            font-size: 0.9rem;
+        }
+        
+        .dashboard-card {
+            border-radius: 8px;
+            border: 1px solid rgba(0,0,0,0.1);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            background-color: white;
+            margin-bottom: 2rem;
+        }
+        
+        .dashboard-card-header {
+            border-bottom: 1px solid rgba(0,0,0,0.1);
+            padding: 1rem 1.5rem;
+            font-weight: 600;
+        }
+        
+        .dashboard-card-body {
+            padding: 1.5rem;
+        }
+        
+        .table-responsive {
+            overflow-x: auto;
+        }
+        
+        .table {
+            margin-bottom: 0;
+        }
+        
+        .table th {
+            background-color: var(--light-color);
+            font-weight: 600;
+        }
+        
+        .table-hover tbody tr:hover {
+            background-color: var(--gray-color);
+        }
+        
+        /* Стили для облака слов */
+        #wordcloud {
+            width: 100%;
+            height: 350px;
+        }
+        
+        /* Адаптивность */
+        @media (max-width: 768px) {
+            .stats-value {
+                font-size: 1.5rem;
+            }
+            
+            .dashboard-card-body {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Хедер дашборда -->
+    <header class="dashboard-header">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h1 class="h4 mb-0">IT Salary Dashboard</h1>
+                    <p class="text-muted mb-0">Аналитика зарплат IT-специалистов</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <span class="badge bg-primary">Всего вакансий: {{ stats.total_vacancies }}</span>
+                </div>
+            </div>
+        </div>
+    </header>
+    
+    <!-- Основной контент -->
+    <div class="container">
+        <!-- Карточки со статистикой -->
+        <div class="row mb-4">
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="stats-card h-100">
+                    <div class="card-body">
+                        <div class="stats-value">{{ "{:,}".format(stats.avg_salary) }} ₽</div>
+                        <div class="stats-label">Средняя зарплата</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="stats-card h-100">
+                    <div class="card-body">
+                        <div class="stats-value">{{ "{:,}".format(stats.median_salary) }} ₽</div>
+                        <div class="stats-label">Медианная зарплата</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="stats-card h-100">
+                    <div class="card-body">
+                        <div class="stats-value">{{ stats.total_positions }}</div>
+                        <div class="stats-label">Типов должностей</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 col-sm-6 mb-3">
+                <div class="stats-card h-100">
+                    <div class="card-body">
+                        <div class="stats-value">{{ stats.total_cities }}</div>
+                        <div class="stats-label">Городов</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Карточки с графиками -->
+        <div class="row">
+            <!-- Топ профессий -->
+            <div class="col-lg-4 mb-4">
+                <div class="dashboard-card h-100">
+                    <div class="dashboard-card-header">
+                        Популярные профессии
+                    </div>
+                    <div class="dashboard-card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Профессия</th>
+                                        <th class="text-center">Кол-во</th>
+                                        <th class="text-end">Доля</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {{ summary_table_html | safe }}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- График зарплат -->
+            <div class="col-lg-8 mb-4">
+                <div class="dashboard-card h-100">
+                    <div class="dashboard-card-header">
+                        Распределение зарплат по должностям
+                    </div>
+                    <div class="dashboard-card-body">
+                        {{ boxplot_html | safe }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Тренды зарплат -->
+            <div class="col-lg-12 mb-4">
+                <div class="dashboard-card">
+                    <div class="dashboard-card-header">
+                        Динамика зарплат по должностям
+                    </div>
+                    <div class="dashboard-card-body">
+                        {{ trend_chart_html | safe }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Форматы работы -->
+            <div class="col-lg-6 mb-4">
+                <div class="dashboard-card h-100">
+                    <div class="dashboard-card-header">
+                        Распределение по формату работы
+                    </div>
+                    <div class="dashboard-card-body">
+                        {{ work_format_chart_html | safe }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Уровни позиций -->
+            <div class="col-lg-6 mb-4">
+                <div class="dashboard-card h-100">
+                    <div class="dashboard-card-header">
+                        Распределение по уровню позиций
+                    </div>
+                    <div class="dashboard-card-body">
+                        {{ position_level_chart_html | safe }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Тепловая карта навыков -->
+            <div class="col-lg-12 mb-4">
+                <div class="dashboard-card">
+                    <div class="dashboard-card-header">
+                        Востребованность навыков по должностям
+                    </div>
+                    <div class="dashboard-card-body">
+                        {{ skills_heatmap_html | safe }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Зарплаты по городам -->
+            <div class="col-lg-7 mb-4">
+                <div class="dashboard-card h-100">
+                    <div class="dashboard-card-header">
+                        Зарплаты по городам
+                    </div>
+                    <div class="dashboard-card-body">
+                        {{ geo_chart_html | safe }}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Облако слов -->
+            <div class="col-lg-5 mb-4">
+                <div class="dashboard-card h-100">
+                    <div class="dashboard-card-header">
+                        Популярные навыки
+                    </div>
+                    <div class="dashboard-card-body">
+                        <div id="wordcloud"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Таблица с детальными данными -->
+            <div class="col-lg-12 mb-4">
+                <div class="dashboard-card">
+                    <div class="dashboard-card-header d-flex justify-content-between align-items-center">
+                        <span>Примеры вакансий</span>
+                        <button class="btn btn-sm btn-outline-primary" id="refreshTableBtn">Обновить выборку</button>
+                    </div>
+                    <div class="dashboard-card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Должность</th>
+                                        <th>Уровень</th>
+                                        <th>Город</th>
+                                        <th>Период</th>
+                                        <th>Формат</th>
+                                        <th>Навыки</th>
+                                        <th>Зарплата</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="salaryTableBody">
+                                    {{ salary_table_html | safe }}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Footer -->
+    <footer class="py-4 bg-light mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <p class="mb-0">IT Salary Dashboard &copy; 2023</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p class="mb-0 text-muted">Последнее обновление данных: {{ today }}</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Скрипт для облака слов -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Данные для облака слов
+            const wordcloudData = {{ wordcloud_data | safe }};
+            
+            // Размеры контейнера
+            const width = document.getElementById('wordcloud').offsetWidth;
+            const height = 350;
+            
+            // Создаем облако слов с D3 Cloud
+            const layout = d3.layout.cloud()
+                .size([width, height])
+                .words(wordcloudData)
+                .padding(5)
+                .rotate(() => ~~(Math.random() * 2) * 90)
+                .font("Impact")
+                .fontSize(d => Math.sqrt(d.value) * 5)
+                .on("end", draw);
+            
+            layout.start();
+            
+            // Функция для отрисовки облака слов
+            function draw(words) {
+                d3.select("#wordcloud").append("svg")
+                    .attr("width", "100%")
+                    .attr("height", height)
+                    .attr("viewBox", `0 0 ${width} ${height}`)
+                    .attr("preserveAspectRatio", "xMidYMid meet")
+                    .append("g")
+                    .attr("transform", `translate(${width / 2},${height / 2})`)
+                    .selectAll("text")
+                    .data(words)
+                    .enter().append("text")
+                    .style("font-size", d => `${d.size}px`)
+                    .style("font-family", "Impact")
+                    .style("fill", () => {
+                        const colors = ["#2196F3", "#4CAF50", "#FFC107", "#FF5722", "#9C27B0", "#00BCD4"];
+                        return colors[Math.floor(Math.random() * colors.length)];
+                    })
+                    .attr("text-anchor", "middle")
+                    .attr("transform", d => `translate(${d.x},${d.y}) rotate(${d.rotate})`)
+                    .text(d => d.text);
+            }
+            
+            // Обработчик для кнопки обновления таблицы
+            document.getElementById('refreshTableBtn').addEventListener('click', function() {
+                fetch('/api/data')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            // Получаем случайную выборку из данных
+                            const randomSample = getRandomSample(data.data, 10);
+                            
+                            // Обновляем таблицу
+                            const tableBody = document.getElementById('salaryTableBody');
+                            tableBody.innerHTML = '';
+                            
+                            randomSample.forEach(item => {
+                                const skills = Array.isArray(item['Ключевые навыки']) 
+                                    ? item['Ключевые навыки'].join(', ') 
+                                    : item['Ключевые навыки'] || '';
+                                
+                                const shortSkills = skills.length > 100 
+                                    ? skills.substring(0, 97) + '...' 
+                                    : skills;
+                                
+                                const row = document.createElement('tr');
+                                row.innerHTML = `
+                                    <td>${item['Название должности']}</td>
+                                    <td>${item['Уровень позиции']}</td>
+                                    <td>${item['Город']}</td>
+                                    <td>${item['Год']}-${item['Месяц_текст']}</td>
+                                    <td>${item['Формат работы']}</td>
+                                    <td>${shortSkills}</td>
+                                    <td>${item['Зарплата'].toLocaleString()} ₽</td>
+                                `;
+                                tableBody.appendChild(row);
+                            });
+                        }
+                    })
+                    .catch(error => console.error('Ошибка при обновлении таблицы:', error));
+            });
+            
+            // Функция для получения случайной выборки из массива
+            function getRandomSample(array, size) {
+                const shuffled = [...array].sort(() => 0.5 - Math.random());
+                return shuffled.slice(0, size);
+            }
+        });
+    </script>
+</body>
+</html>
